@@ -1,4 +1,3 @@
-import { concat } from 'uint8arrays/concat'
 import { equals } from 'uint8arrays/equals'
 import { allocUnsafe, alloc } from 'uint8arrays/alloc'
 
@@ -37,7 +36,7 @@ export function isUint8ArrayList (value: any): value is Uint8ArrayList {
 }
 
 export class Uint8ArrayList implements Iterable<Uint8Array> {
-  private bufs: Uint8Array[]
+  private bufs: Buffer[]
   public length: number
 
   constructor (...data: Appendable[]) {
@@ -76,7 +75,8 @@ export class Uint8ArrayList implements Iterable<Uint8Array> {
     for (const buf of bufs) {
       if (buf instanceof Uint8Array) {
         length += buf.byteLength
-        this.bufs.push(buf)
+        // append a view of the underlying ArrayBuffer
+        this.bufs.push(toBuffer(buf))
       } else if (isUint8ArrayList(buf)) {
         length += buf.byteLength
         this.bufs.push(...buf.bufs)
@@ -104,7 +104,8 @@ export class Uint8ArrayList implements Iterable<Uint8Array> {
     for (const buf of bufs.reverse()) {
       if (buf instanceof Uint8Array) {
         length += buf.byteLength
-        this.bufs.unshift(buf)
+        // append a view of the underlying ArrayBuffer
+        this.bufs.unshift(toBuffer(buf))
       } else if (isUint8ArrayList(buf)) {
         length += buf.byteLength
         this.bufs.unshift(...buf.bufs)
@@ -185,7 +186,12 @@ export class Uint8ArrayList implements Iterable<Uint8Array> {
   slice (beginInclusive?: number, endExclusive?: number): Uint8Array {
     const { bufs, length } = this._subList(beginInclusive, endExclusive)
 
-    return concat(bufs, length)
+    // TODO: against the spec, just want to give it a try
+    if (bufs.length === 1) {
+      return bufs[0]
+    }
+
+    return Buffer.concat(bufs, length)
   }
 
   /**
@@ -201,7 +207,7 @@ export class Uint8ArrayList implements Iterable<Uint8Array> {
       return bufs[0]
     }
 
-    return concat(bufs, length)
+    return Buffer.concat(bufs, length)
   }
 
   /**
@@ -244,7 +250,7 @@ export class Uint8ArrayList implements Iterable<Uint8Array> {
       return { bufs: [...this.bufs], length: this.length }
     }
 
-    const bufs: Uint8Array[] = []
+    const bufs: Buffer[] = []
     let offset = 0
 
     for (let i = 0; i < this.bufs.length; i++) {
@@ -487,7 +493,7 @@ export class Uint8ArrayList implements Iterable<Uint8Array> {
    */
   static fromUint8Arrays (bufs: Uint8Array[], length?: number): Uint8ArrayList {
     const list = new Uint8ArrayList()
-    list.bufs = bufs
+    list.bufs = bufs.map(toBuffer)
 
     if (length == null) {
       length = bufs.reduce((acc, curr) => acc + curr.byteLength, 0)
@@ -497,4 +503,8 @@ export class Uint8ArrayList implements Iterable<Uint8Array> {
 
     return list
   }
+}
+
+function toBuffer(buf: Uint8Array): Buffer {
+  return buf instanceof Buffer ? buf : Buffer.from(buf.buffer, buf.byteOffset, buf.byteLength)
 }
